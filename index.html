@@ -1,0 +1,119 @@
+<!doctype html>
+
+<html lang="en">
+
+<head>
+
+  <meta charset="utf-8">
+
+  <title>Canvas Ray Tracer</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gl-matrix/2.8.1/gl-matrix-min.js"
+    integrity="sha512-zhHQR0/H5SEBL3Wn6yYSaTTZej12z0hVZKOv3TwCUXT1z5qeqGcXJLLrbERYRScEDDpYIJhPC1fk31gqR783iQ=="
+    crossorigin="anonymous">
+    </script>
+  <script src="camera.js"></script>
+  <script src="obj_loader.js"></script>
+  <script src="scene.js"></script>
+
+</head>
+
+<body>
+
+  <input type="file" onchange="readFiles(this)" multiple>
+  <canvas class="myCanvas" width="1024" height="768"></canvas>
+
+
+
+  <script>
+
+    const canvas = document.querySelector('.myCanvas');
+
+    // set size of 2D image
+
+    const width = 1024;
+
+    const height = 768;
+
+    const ctx = canvas.getContext('2d');
+
+    const scene = new Scene();
+
+    async function readFiles(input) {
+      scene.clearScene();
+      for (let i = 0; i < input.files.length; i++) {
+        let file = input.files[i];
+        let reader = new FileReader();
+        reader.readAsText(file);
+        reader.onload = function () {
+          if (file.name.includes(".txt")) {
+            console.log("Loading Scene File...");
+            scene.loadSceneInfo(reader.result);
+          } else if (file.name.includes(".obj")) {
+            console.log("Loading OBJ File...");
+            scene.loadObj(file.name, reader.result);
+          } else {
+            console.log("Invalid scene extension");
+          }
+        };
+        reader.onerror = function () {
+          console.log(reader.error);
+        };
+      }
+
+      // Adding a delay allows js to load all files properly
+      await setTimeout(() => {
+        start();
+      }, 2000);
+    }
+
+    function start() {
+
+      // Assign the last loaded object as the mesh to be drawn
+      // This is done to avoid javascript's asynchronous file loading
+      scene.assignAsMesh();
+
+      scene.transformMeshes();
+      
+      scene.bvhs.push(buildBVHSpheres(scene.spheres));
+
+      console.log(scene.bvhs);
+
+      // set background to black
+
+      ctx.fillStyle = 'rgb(0, 0, 0)';
+
+      ctx.fillRect(0, 0, width, height);
+
+      scene.raytrace();
+    }
+
+    // Set a specific color for a pixel on a canvas
+    function setPixel(ctx, x, y, r, g, b) {
+
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+
+      ctx.fillRect(x, y, 1, 1);
+
+    }
+
+    // Set a random color for a pixel on a canvas
+    // Used as a placeholder
+    function setRandomColor(x, y) {
+
+      ctx.fillStyle = `rgb(
+
+        ${Math.floor(Math.random() * 255)},
+
+        ${Math.floor(Math.random() * 255)},
+
+        ${Math.floor(Math.random() * 255)} )`;
+
+      ctx.fillRect(x, y, 1, 1);
+    }
+
+  </script>
+
+</body>
+
+</html>
