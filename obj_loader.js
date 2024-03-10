@@ -1,8 +1,11 @@
-
+// Author: Kyle Lukaszek
+// CIS*4800 W24 - Computer Graphics
+// Assignment 3
 /* 
   -the functions which returns a properly formatted object for the .obj file
   -Originally written for Assignment 2, but modified for Assignment 3
 */
+
 class Obj {
   constructor(filename, vertices, normals, indices, faces, vertexCount) {
     this.name = filename;
@@ -12,7 +15,7 @@ class Obj {
     this.faces = faces;
     this.vertexCount = vertexCount;
   }
-  
+
   // return the number of vertices in the object
   getVertexCount() {
     return (this.vertexCount);
@@ -33,7 +36,7 @@ class Obj {
     return this.indices;
   }
 
-  getName(){
+  getName() {
     return this.name;
   }
 }
@@ -169,7 +172,7 @@ function calculateMeshNormalsFromFaces(local_vertices, faces) {
 }
 
 function calculateMeshNormalsFromVertices(vertices, indices) {
-  
+
   // Create an array to store the normals for each vertex, and initialize them to [0, 0, 0]
   let local_normals = new Array(vertices.length).fill([0, 0, 0]);
 

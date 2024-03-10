@@ -2,492 +2,14 @@
 // CIS*4800 W24 - Computer Graphics
 // Assignment 3
 
-// Create a cube with the given dimensions
-class BVHNode {
-  constructor(boundingBox, left, right, object) {
-    this.boundingBox = boundingBox; /// min and max bounds of the bounding box
-    this.left = left;   // left child or null for leaf
-    this.right = right; // right child or null for leaf
-    this.object = object; // object in the leaf node
-  }
-
-  // Check if a ray intersects the bounding box, and if it happens to be a leaf node we get the pixel colour and distance from the object
-  intersects(scene, rayOrigin, rayDirection) {
-
-    // If no intersection with the bounding box, return null
-    if (!this.boundingBoxIntersect(rayOrigin, rayDirection)) {
-      return null;
-    }
-
-    // If the node is a leaf, check if the ray intersects the object and return the result (pixel colour and distance)
-    if (this.object) {
-
-      let info = this.object.raytrace(scene, rayOrigin, rayDirection);
-      return info;
-    }
-
-    // Check both children for intersections with the ray
-    let leftLeaf = this.left.intersects(scene, rayOrigin, rayDirection);
-    
-    // Otherwise, we return the right leaf
-    if (leftLeaf != null) {
-      let rightLeaf = this.right.intersects(scene, rayOrigin, rayDirection);
-
-      // If the right leaf is closer, return it
-      if (rightLeaf != null) {
-        if (rightLeaf.dist < leftLeaf.dist) {
-          return rightLeaf;
-        }
-      }
-
-      return leftLeaf;
-
-    } else {
-      return this.right.intersects(scene, rayOrigin, rayDirection);
-    }
-  }
-
-  // Check if a ray intersects the bounding box
-  boundingBoxIntersect(rayOrigin, rayDirection) {
-
-    // Calculate intersection parameters (t-values) for the x-axis
-    let tmin = (this.boundingBox.min[0] - rayOrigin[0]) / rayDirection[0];
-    let tmax = (this.boundingBox.max[0] - rayOrigin[0]) / rayDirection[0];
-
-    // Ensure tmin is the minimum and tmax is the maximum
-    if (tmin > tmax) {
-      let temp = tmin;
-      tmin = tmax;
-      tmax = temp;
-    }
-
-    // Calculate intersection parameters (t-values) for the y-axis
-    let tymin = (this.boundingBox.min[1] - rayOrigin[1]) / rayDirection[1];
-    let tymax = (this.boundingBox.max[1] - rayOrigin[1]) / rayDirection[1];
-
-    // Ensure tymin is the minimum and tymax is the maximum
-    if (tymin > tymax) {
-      let temp = tymin;
-      tymin = tymax;
-      tymax = temp;
-    }
-
-    // Check for no intersection along the y-axis
-    if ((tmin > tymax) || (tymin > tmax)) {
-      return false;
-    }
-
-    // Update tmin and tmax based on y-axis intersection
-    if (tymin > tmin) {
-      tmin = tymin;
-    }
-
-    if (tymax < tmax) {
-      tmax = tymax;
-    }
-
-    // Calculate intersection parameters (t-values) for the z-axis
-    let tzmin = (this.boundingBox.min[2] - rayOrigin[2]) / rayDirection[2];
-    let tzmax = (this.boundingBox.max[2] - rayOrigin[2]) / rayDirection[2];
-
-    // Ensure tzmin is the minimum and tzmax is the maximum
-    if (tzmin > tzmax) {
-      let temp = tzmin;
-      tzmin = tzmax;
-      tzmax = temp;
-    }
-
-    // Check for no intersection along the z-axis
-    if ((tmin > tzmax) || (tzmin > tmax)) {
-      return false;
-    }
-
-    // Update tmin and tmax based on z-axis intersection
-    if (tzmin > tmin) {
-      tmin = tzmin;
-    }
-
-    if (tzmax < tmax) {
-      tmax = tzmax;
-    }
-
-    // If all axes have valid intersection intervals, the ray intersects the AABB
-    return true;
-
-  }
-}
-
-function buildBVHSpheres(spheres) {
-  if (spheres.length == 0) return null;
-
-  // If only one sphere, return a new leaf node with the sphere as the object
-  if (spheres.length == 1) {
-    let boundingBox = calculateBoundingBox(spheres);
-    return new BVHNode(boundingBox, null, null, spheres[0]);
-  }
-
-  // Get the bounding box for the spheres and then partition them
-  let boundingBox = calculateBoundingBox(spheres);
-  let partitionedSpheres = partitionSpheres(spheres, boundingBox);
-
-  let left = buildBVHSpheres(partitionedSpheres.left);
-  let right = buildBVHSpheres(partitionedSpheres.right);
-
-  // Create new node from partitions
-  return new BVHNode(boundingBox, left, right, null);
-}
-
-function calculateBoundingBox(spheres) {
-
-  // We have use infinity because Number.MIN_VALUE -> 0 from the right side
-  let min = [Infinity, Infinity, Infinity];
-  let max = [-Infinity, -Infinity, -Infinity];
-
-  // Find the minimum and maximum bounds of the spheres
-  for (let sphere of spheres) {
-
-    let minExt = sphere.getMinExtent();
-    let maxExt = sphere.getMaxExtent();
-
-    for (let i = 0; i < 3; i++) {
-      min[i] = Math.min(min[i], minExt[i]);
-      max[i] = Math.max(max[i], maxExt[i]);
-    }
-  }
-
-  return { min: min, max: max };
-}
-
-function partitionSpheres(spheres, boundingBox) {
-  console.log(spheres.length);
-  if (spheres.length === 0) return { left: [], right: [] };
-
-  let min = boundingBox.min;
-  let max = boundingBox.max;
-
-  // Determine the longest axis
-  let extents = vec3.subtract([], max, min);
-  let longestAxis = extents.indexOf(Math.max(...extents));
-
-  // Sort the spheres by the longest axis
-  // Important because it determines how the spheres are disributed in the BVH tree
-  spheres.sort((a, b) => a.position[longestAxis] - b.position[longestAxis]);
-
-  // Split the sorted list of spheres into two halves
-  let middle = Math.floor(spheres.length / 2);
-  let left = spheres.slice(0, middle);
-  let right = spheres.slice(middle);
-
-  return { left: left, right: right };
-}
-
-class Sphere {
-  constructor() {
-    this.position = vec3.create();
-    this.radius = 0.0;
-    this.ambient = vec3.create();
-    this.diffuse = vec3.create();
-    this.specular = vec3.create();
-    this.shiny = 0.0;
-  }
-
-  // return min aabb extent
-  getMinExtent() {
-    return vec3.subtract([], this.position, vec3.fromValues(this.radius, this.radius, this.radius));
-  }
-
-  // return max aabb extent
-  getMaxExtent() {
-    return vec3.add([], this.position, vec3.fromValues(this.radius, this.radius, this.radius));
-  }
-
-  // Ray trace a given point on a sphere
-  raytrace(scene, rayOrigin, rayDirection) {
-
-    let intersection = this.sphereIntersect(rayOrigin, rayDirection);
-
-    let pixel = null;
-
-    let dist = Number.MAX_VALUE;
-    if (intersection != null) {
-      dist = vec3.distance(rayOrigin, intersection);
-      pixel = this.calculateShading(intersection, rayOrigin, scene.lights);
-    }
-
-    return { pixel: pixel, dist: dist };
-  }
-
-  // Return the intersection point of a ray with the sphere
-  sphereIntersect(rayOrigin, rayDirection) {
-
-    let a = 1.0;
-    let oc = vec3.subtract([], rayOrigin, this.position);
-    let b = 2.0 * vec3.dot(rayDirection, oc);
-    let c = vec3.dot(oc, oc) - this.radius * this.radius;
-    let discriminant = b * b - 4.0 * a * c;
-
-    // If a root exists, return the intersection point
-    if (discriminant > 0) {
-      return intersectPoint(rayOrigin, rayDirection, a, b, discriminant);
-    } else if (discriminant == 0) {
-      return null;
-    }
-  }
-
-  // Determine the shading at a given intersection point
-  calculateShading(intersection, rayOrigin, lights) {
-
-    let center = this.position;
-
-    let normal = vec3.normalize([], vec3.subtract([], intersection, center));
-    let view = vec3.normalize([], vec3.subtract([], rayOrigin, intersection));
-
-    let result = vec3.fromValues(0, 0, 0);
-    for (let i = 0; i < lights.length; i++) {
-
-      let pixel = vec3.fromValues(0, 0, 0);
-      let lightPos = lights[i].position;
-      let lightAmbient = lights[i].la;
-      let lightColor = lights[i].lp;
-
-      let lightDir = vec3.normalize([], vec3.subtract([], lightPos, intersection));
-
-      let ambientColor = vec3.multiply([], this.ambient, lightAmbient);
-
-      // Calculate the diffuse component
-      let nDotL = vec3.dot(normal, lightDir);
-      let diffuseColor = vec3.multiply([], this.diffuse, lightColor);
-      vec3.scale(diffuseColor, diffuseColor, nDotL);
-
-      // Calculate the reflection direction
-      let temp = 2.0 * nDotL;
-      let reflectDir = vec3.scale([], normal, temp);
-      vec3.subtract(reflectDir, reflectDir, lightDir);
-      vec3.normalize(reflectDir, reflectDir);
-
-      // Calculate the specular component
-      let spec = Math.pow(Math.max(vec3.dot(view, reflectDir), 0), this.shiny);
-      let specularColor = vec3.multiply([], this.specular, lightColor);
-      vec3.scale(specularColor, specularColor, spec);
-
-      // Add the ambient, diffuse, and specular components to the pixel
-      vec3.add(pixel, pixel, ambientColor);
-      vec3.add(pixel, pixel, diffuseColor);
-      vec3.add(pixel, pixel, specularColor);
-
-      // Add light contribution to the result
-      vec3.add(result, result, pixel);
-    }
-
-    // Multiply the pixel by 255 to get the final color for canvas
-    vec3.multiply(result, result, vec3.fromValues(255.0, 255.0, 255.0));
-    return result;
-  }
-}
-
-class PointLight {
-  constructor() {
-    this.position = vec3.create();
-    this.la = vec3.create(); // ambient colour
-    this.lp = vec3.create(); // point light colour
-  }
-}
-
-class Mesh {
-  constructor() {
-    this.obj = new Obj();
-    this.transform = mat4.create();
-    this.ambient = vec3.create();
-    this.diffuse = vec3.create();
-    this.specular = vec3.create();
-    this.shiny = 0.0;
-    //this.bvh = new BVH();
-  }
-
-  // I was having trouble with raytracing the mesh in the shaders, so I decided to raytrace the mesh in js
-  raytrace(scene, x, y) {
-
-    let rayOrigin = scene.camera.getPosition();
-    let rayDirection = getRayDirection(scene, x, y);
-
-    let intersection = this.intersectRayTriangle(rayOrigin, rayDirection);
-
-    let pixel = null
-    let dist = Number.MAX_VALUE;
-    if (intersection != null) {
-      pixel = this.calculateShading(intersection.point, rayOrigin, scene.lights, intersection.normal);
-      dist = vec3.distance(rayOrigin, intersection.point);
-    }
-
-    return { pixel: pixel, dist: dist };
-  }
-
-  // Calculate the shading for the current pixel
-  calculateShading(intersection, rayOrigin, lights, normal) {
-
-    let view = vec3.normalize([], vec3.subtract([], rayOrigin, intersection));
-
-    let result = vec3.fromValues(0, 0, 0);
-    for (let i = 0; i < lights.length; i++) {
-
-      let pixel = vec3.fromValues(0, 0, 0);
-      let lightPos = lights[i].position;
-      let lightAmbient = lights[i].la;
-      let lightColor = lights[i].lp;
-
-      let lightDir = vec3.normalize([], vec3.subtract([], lightPos, intersection));
-
-      let ambientColor = vec3.multiply([], this.ambient, lightAmbient);
-
-      // Calculate the diffuse component
-      let nDotL = vec3.dot(normal, lightDir);
-      let diffuseColor = vec3.multiply([], this.diffuse, lightColor);
-      vec3.scale(diffuseColor, diffuseColor, nDotL);
-
-      // Calculate the reflection direction
-      let temp = 2.0 * nDotL;
-      let reflectDir = vec3.scale([], normal, temp);
-      vec3.subtract(reflectDir, reflectDir, lightDir);
-      vec3.normalize(reflectDir, reflectDir);
-
-      // Calculate the specular component
-      let spec = Math.pow(Math.max(vec3.dot(view, reflectDir), 0), this.shiny);
-      let specularColor = vec3.multiply([], this.specular, lightColor);
-      vec3.scale(specularColor, specularColor, spec);
-
-      // Add the ambient, diffuse, and specular components to the pixel
-      vec3.add(pixel, pixel, ambientColor);
-      vec3.add(pixel, pixel, diffuseColor);
-      vec3.add(pixel, pixel, specularColor);
-
-      // Add light contribution to the result
-      vec3.add(result, result, pixel);
-    }
-
-    // Multiply the pixel by 255 to get the final color for canvas 
-    vec3.multiply(result, result, vec3.fromValues(255.0, 255.0, 255.0));
-    return result;
-  }
-
-  // Return the intersection point of a ray with the meshes
-  intersectRayTriangle(rayOrigin, rayDirection) {
-
-    let closestIntersection = null;
-    let closestDist = Number.MAX_VALUE;
-
-    for (let i = 0; i < this.obj.vertices.length; i += 9) {
-
-      let v0 = this.obj.vertices.slice(i, i + 3);
-      let v1 = this.obj.vertices.slice(i + 3, i + 6);
-      let v2 = this.obj.vertices.slice(i + 6, i + 9);
-
-      let n0 = this.obj.normals.slice(i, i + 3);
-      let n1 = this.obj.normals.slice(i + 3, i + 6);
-      let n2 = this.obj.normals.slice(i + 6, i + 9);
-
-      let intersection = this.MollerTrumbore(rayOrigin, rayDirection, v0, v1, v2, n0, n1, n2);
-      // Return the closest intersection point found
-      if (intersection != null) {
-        let dist = vec3.distance(rayOrigin, intersection);
-        if (dist < closestDist) {
-          closestDist = dist;
-          closestIntersection = { point: intersection, normal: this.interpolateNormal(intersection, v0, v1, v2, n0, n1, n2) };
-        }
-      }
-    }
-
-    return closestIntersection;
-  }
-
-
-  // Find if a ray intersects a triangle
-  MollerTrumbore(rayOrigin, rayDirection, v0, v1, v2) {
-    var epsilon = 0.000001;
-
-    // Find edges of the triangle
-    var edge1 = vec3.subtract([], v1, v0);
-    var edge2 = vec3.subtract([], v2, v0);
-
-    // Calculate determinant
-    var h = vec3.cross([], rayDirection, edge2);
-    var a = vec3.dot(edge1, h);
-
-    // If determinant is near zero, ray lies in plane of triangle
-    if (a > -epsilon && a < epsilon) {
-      return null;
-    }
-
-    var f = 1 / a;
-    var s = vec3.subtract([], rayOrigin, v0);
-    var u = f * vec3.dot(s, h);
-
-    if (u < 0 || u > 1) {
-      return null;
-    }
-
-    var q = vec3.cross([], s, edge1);
-    var v = f * vec3.dot(rayDirection, q);
-
-    if (v < 0 || u + v > 1) {
-      return null;
-    }
-
-    var t = f * vec3.dot(edge2, q);
-
-    if (t > epsilon) {
-      var intersectionPoint = vec3.scaleAndAdd([], rayOrigin, rayDirection, t);
-
-      return intersectionPoint;
-    } else {
-      return null;
-    }
-  }
-
-  // Interpolate the normal at the intersection point
-  interpolateNormal(intersectionPoint, v0, v1, v2, n0, n1, n2) {
-
-    let barycentric = this.getBarycentricCoordinates(intersectionPoint, v0, v1, v2);
-    let normal = vec3.create();
-
-    vec3.scaleAndAdd(normal, normal, n0, barycentric[0]);
-    vec3.scaleAndAdd(normal, normal, n1, barycentric[1]);
-    vec3.scaleAndAdd(normal, normal, n2, barycentric[2]);
-    vec3.normalize(normal, normal);
-
-    return normal;
-  }
-
-  // Calculate the barycentric coordinates of a point on a triangle so that we can interpolate the normals
-  getBarycentricCoordinates(intersectionPoint, v0, v1, v2) {
-    let edge1 = vec3.subtract([], v1, v0);
-    let edge2 = vec3.subtract([], v2, v0);
-    let edge3 = vec3.subtract([], intersectionPoint, v0);
-
-    let dot11 = vec3.dot(edge1, edge1);
-    let dot12 = vec3.dot(edge1, edge2);
-    let dot22 = vec3.dot(edge2, edge2);
-    let dot31 = vec3.dot(edge3, edge1);
-    let dot32 = vec3.dot(edge3, edge2);
-
-    let invDenom = 1 / (dot11 * dot22 - dot12 * dot12);
-
-    let barycentric = vec3.create();
-
-    barycentric[1] = (dot22 * dot31 - dot12 * dot32) * invDenom;
-    barycentric[2] = (dot11 * dot32 - dot12 * dot31) * invDenom;
-    barycentric[0] = 1 - barycentric[1] - barycentric[2];
-
-    return barycentric;
-  }
-}
+/* ---------------------- Scene -----------------------------*/
 
 class Scene {
   constructor() {
     this.canvas = document.querySelector(".myCanvas");
     this.lights = [];
-    this.spheres = []
-    this.meshes = [];
-    this.bvhs = [];
+    this.objects = [];
+    this.bvh = null;
     this.c = 0;
     this.camera = new Camera(vec3.fromValues(0, 0, 0), vec3.fromValues(1, 1, 1), 60.0 * Math.PI / 180, null, 0.01, 100.0);
     this.camera.setAspect(this.canvas.width / this.canvas.height);
@@ -499,8 +21,6 @@ class Scene {
 
   // Load a scene description from an input file
   loadSceneInfo(sceneFile) {
-    this.lights = [];
-    this.meshes = [];
     this.c = 0;
 
     // Split file contents into lines array. Filter out empty strings.
@@ -580,12 +100,11 @@ class Scene {
           i += 1;
         } catch (error) {
           failed = true;
-          console.error(error);
-          //console.error("Error: Failed to read scene line " + (i+1) + ". Make sure the format is correct.");
+          console.error("Error: Failed to read scene line " + (i + 1) + ". Make sure the format is correct.");
         }
 
         if (!failed) {
-          this.spheres.push(sphere);
+          this.objects.push(sphere);
         }
 
       } else if (lineType.toLowerCase() === "mesh".toLowerCase()) {
@@ -594,10 +113,10 @@ class Scene {
         let mesh = new Mesh();
 
         try {
-          let t, rot, scale, a, d, s, shiny;
+          let p, rot, scale, a, d, s, shiny;
 
           // Get the transformation matrix components
-          t = parts.slice(0, 3);
+          p = parts.slice(0, 3);
           rot = parts.slice(3, 6);
           scale = parts[6];
 
@@ -607,8 +126,13 @@ class Scene {
           s = parts.slice(13, 16);
           shiny = parseFloat(parts[16]);
 
-          // Using t, rot, and scale, create a transformation matrix for the mesh
-          let transform_matrix = createTransformMatrix(t, rot, scale);
+          // Using p, rot, and scale, create a transformation matrix for the mesh
+          let transform_matrix = createTransformMatrix(p, rot, scale);
+
+          // Set the position, rotation, and scale of the mesh
+          mesh.position = vec3.fromValues(...p);
+          mesh.rotation = vec3.fromValues(...rot);
+          mesh.scale = scale;
 
           // Set the transformation matrix
           mesh.transform = transform_matrix;
@@ -639,28 +163,28 @@ class Scene {
 
         // Add the mesh to the scene if all goes well
         if (!failed) {
-          this.meshes.push(mesh);
+          this.objects.push(mesh);
         }
 
       } else {
         console.error("Error: Invalid scene description at line " + (i + 1) + ".");
       }
     });
-
-    // Sort the spheres by distance from the camera
-    this.sortSpheresByDistance();
   }
 
-  // Ray trace the scene
+  // Cast rays through the scene and render any intersections as pixels on the canvas
   raytrace() {
 
-    let depth = Array.from({ length: this.canvas.width * this.canvas.height }, () => Number.MAX_VALUE);
     let ctx = this.canvas.getContext("2d");
+    let depth = Array.from({ length: this.canvas.width * this.canvas.height }, () => Number.MAX_VALUE);
 
     let rayOrigin = this.camera.getPosition();
 
     // Iterate over each pixel in the canvas and ray trace for each pixel
     for (let y = 0; y < this.canvas.height; y++) {
+
+      if (y % 50 === 0) console.log("Ray tracing is at line " + y + " of " + this.canvas.height + "...");
+
       for (let x = 0; x < this.canvas.width; x++) {
 
         // Calculate the ray direction for the current pixel
@@ -669,66 +193,47 @@ class Scene {
         let index = y * this.canvas.width + x;
 
         // If a BVH exists, use it to intersect the ray with the scene
-        for (let i = 0; i < this.bvhs.length; i++) {
-          let intersection = this.bvhs[i].intersects(this, rayOrigin, rayDirection);
+        let intersection = this.bvh.intersects(this, rayOrigin, rayDirection);
 
-          // If the intersection point is not null, set the pixel to what was 
-          // returned if the depth is less than the current depth
-          if (intersection != null) {
+        // If the intersection point is not null, set the pixel to what was 
+        // returned if the depth is less than the current depth
+        if (intersection != null) {
 
-            let pixel = intersection.pixel;
+          let pixel = intersection.pixel;
+          let dist = intersection.dist;
 
-            let dist = intersection.dist;
-
-            // If the distance to the intersection point is less than the current depth, set the pixel
-            if (dist < depth[index]) {
-              depth[index] = dist;
-              let r = pixel[0];
-              let g = pixel[1];
-              let b = pixel[2];
-              setPixel(ctx, x, y, r, g, b);
-            }
+          // If the distance to the intersection point is less than the current depth, set the pixel
+          if (dist < depth[index]) {
+            depth[index] = dist;
+            let r = pixel[0];
+            let g = pixel[1];
+            let b = pixel[2];
+            setPixel(ctx, x, y, r, g, b);
           }
         }
-
-
-        // // Iterate over each mesh in the scene and ray trace for each mesh 
-        // for (let i = 0; i < this.meshes.length; i++) {
-        //   let info = this.meshes[i].raytrace(this, x, y);
-        //
-        //   let pixel = info.pixel;
-        //
-        //   let dist = info.dist;
-        //
-        //   let index = y * this.canvas.width + x;
-        //
-        //   // If the distance to the intersection point is less than the current depth, set the pixel
-        //   if (dist < depth[index]) {
-        //     depth[index] = dist;
-        //     let r = pixel[0];
-        //     let g = pixel[1];
-        //     let b = pixel[2];
-        //     setPixel(ctx, x, y, r, g, b);
-        //   }
-        // }
       }
     }
+    
+    console.log("Ray tracing is at line " + this.canvas.height + " of " + this.canvas.height + "...");
+    console.log("Ray tracing complete.");
   }
 
   // Clear the scene
   clearScene() {
     this.lights = [];
-    this.spheres = []
-    this.meshes = [];
-    this.bvhs = [];
+    this.objects = [];
+    this.bvh = null;
     this.c = 0;
     this.camera = new Camera(vec3.fromValues(0, 0, 0), vec3.fromValues(1, 1, 1), 60.0 * Math.PI / 180, null, 0.01, 100.0);
     this.camera.setAspect(this.canvas.width / this.canvas.height);
     this.camera.update();
     this._loadedObjs = [];
+    let ctx = this.canvas.getContext("2d");
+
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
-  // Load a mesh from a file into the scene.
+  // Load a .obj from a file into the scene.
   async loadObj(filename, obj_contents) {
 
     console.log("Loading mesh from file: " + filename);
@@ -738,9 +243,20 @@ class Scene {
     // Append the loaded object to the list of loaded objects
     this._loadedObjs.push(obj);
 
-    if (this.meshes.length > 0) {
+    if (this.objects.length > 0) {
       this.assignAsMesh();
     }
+  }
+
+  /* ---------------------- Object Scene Helpers -----------------------------*/
+
+  // Iterate through the objects in the scene and assign 
+  // the last loaded obj to the meshes present in the scene
+  assignAsMesh() {
+    this.objects.forEach(object => {
+      if (object instanceof Mesh)
+        object.obj = this._loadedObjs[this._loadedObjs.length - 1];
+    });
   }
 
   // Get any property from an object within the scene (primitive or mesh)
@@ -752,55 +268,63 @@ class Scene {
     return result;
   }
 
-  /* ---------------------- Light Scene Helpers -----------------------------*/
+  // Sort objects before passing to BVH builder
+  sortObjectsByDistance() {
+    let cam_pos = this.camera.getPosition();
 
-  /* ---------------------- Sphere Scene Helpers -----------------------------*/
-
-  // Sort spheres before passing to shader to avoid resorting on every shader pass
-  // We use this to avoid any problems with the shader drawing the spheres in the wrong order
-  // To implement transparency, we might have to make some adjustments to our scene description
-  sortSpheresByDistance() {
-    this.spheres.sort((a, b) => {
-      let cam_pos = this.camera.getPosition();
+    this.objects.sort((a, b) => {
       return vec3.distance(cam_pos, a.position) - vec3.distance(cam_pos, b.position);
     });
   }
 
-  /* ---------------------- Object Scene Helpers -----------------------------*/
-
-  // In the event that the obj files have not loaded on time, set the mesh's obj to the last loaded obj
-  // Ultimately the goal is to include a name for the obj file in the scene description 
-  // and then I can use that to assign the obj to the mesh when the obj is loaded
-  assignAsMesh() {
-    this.meshes.forEach(mesh => {
-      mesh.obj = this._loadedObjs[this._loadedObjs.length - 1];
-    });
-  }
-
-  // Apply the mesh transformation matrix to the vertices of the associated obj
+  // Apply the mesh transformation matrix to the vertices and normals of the associated obj
   transformMeshes() {
 
     // If no objs have been loaded but a mesh has been added to the scene, return and do nothing since there is nothing to transform
     if (this._loadedObjs.length === 0) return;
 
-    this.meshes.forEach(mesh => {
-      for (let i = 0; i < mesh.obj.vertices.length; i += 3) {
-        let vertex = vec3.fromValues(mesh.obj.vertices[i], mesh.obj.vertices[i + 1], mesh.obj.vertices[i + 2]);
-        vec3.transformMat4(vertex, vertex, mesh.transform);
-        mesh.obj.vertices[i] = vertex[0];
-        mesh.obj.vertices[i + 1] = vertex[1];
-        mesh.obj.vertices[i + 2] = vertex[2];
+    this.objects.forEach(object => {
 
-        // Apply the transformation matrix to the normals as well
-        let normal = vec3.fromValues(mesh.obj.normals[i], mesh.obj.normals[i + 1], mesh.obj.normals[i + 2]);
-        vec3.transformMat4(normal, normal, mesh.transform);
-        vec3.scale(normal, normal, -1);
+      // If the object is a mesh, apply the transformation matrix to the vertices and normals
+      if (object instanceof Mesh) {
+        let mesh = object;
+        for (let i = 0; i < mesh.obj.vertices.length; i += 3) {
+          // Apply the transformation matrix to the vertices
+          let vertex = vec3.fromValues(mesh.obj.vertices[i], mesh.obj.vertices[i + 1], mesh.obj.vertices[i + 2]);
+          vec3.transformMat4(vertex, vertex, mesh.transform);
+          mesh.obj.vertices[i] = vertex[0];
+          mesh.obj.vertices[i + 1] = vertex[1];
+          mesh.obj.vertices[i + 2] = vertex[2];
 
-        mesh.obj.normals[i] = normal[0];
-        mesh.obj.normals[i + 1] = normal[1];
-        mesh.obj.normals[i + 2] = normal[2];
+          // Apply the transformation matrix to the normals as well
+          let normal = vec3.fromValues(mesh.obj.normals[i], mesh.obj.normals[i + 1], mesh.obj.normals[i + 2]);
+          vec3.transformMat4(normal, normal, mesh.transform);
+          // Invert the normals
+          vec3.scale(normal, normal, -1);
+          mesh.obj.normals[i] = normal[0];
+          mesh.obj.normals[i + 1] = normal[1];
+          mesh.obj.normals[i + 2] = normal[2];
+        }
       }
     });
+  }
+
+  removeHangingMeshes() {
+
+    let newObjects = [];
+    this.objects.forEach(object => {
+      if (object instanceof Mesh) {
+        if (object.obj !== undefined && object.obj !== null) {
+          newObjects.push(object);
+        } else {
+          console.log("Mesh removed from scene. No obj file associated with mesh. Ray tracing will continue without it.");
+        }
+      } else {
+        newObjects.push(object);
+      }
+    });
+    this.objects = newObjects;
+
   }
 }
 

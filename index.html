@@ -14,6 +14,8 @@
     </script>
   <script src="camera.js"></script>
   <script src="obj_loader.js"></script>
+  <script src="object.js"></script>
+  <script src="bvh.js"></script>
   <script src="scene.js"></script>
 
 </head>
@@ -73,11 +75,22 @@
       // This is done to avoid javascript's asynchronous file loading
       scene.assignAsMesh();
 
-      scene.transformMeshes();
+      // This removes any meshes that may have been loaded that don't have any obj files assigned to them
+      scene.removeHangingMeshes();
       
-      scene.bvhs.push(buildBVHSpheres(scene.spheres));
+      // Apply transformations to the meshes
+      scene.transformMeshes();
 
-      console.log(scene.bvhs);
+      // Sort the objects by distance from the camera
+      scene.sortObjectsByDistance();
+
+      console.log("Building BVH...");
+      scene.bvh = buildBVH(scene.objects);
+
+      console.log(scene.bvh);
+
+      console.log("Scene to be rendered");
+      console.log(scene);
 
       // set background to black
 
@@ -85,6 +98,7 @@
 
       ctx.fillRect(0, 0, width, height);
 
+      console.log("Ray Tracing...");
       scene.raytrace();
     }
 
