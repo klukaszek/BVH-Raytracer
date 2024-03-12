@@ -221,7 +221,7 @@ class Mesh {
       let v2 = this.obj.vertices.slice(i + 6, i + 9);
 
       let intersection = this.MollerTrumbore(rayOrigin, rayDirection, v0, v1, v2);
-      // Return the closest intersection point found along with the normal
+      // Return the closest intersection point found along with the normal of the intersection
       if (intersection != null) {
         let dist = vec3.distance(rayOrigin, intersection);
 
