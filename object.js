@@ -220,17 +220,15 @@ class Mesh {
       let v1 = this.obj.vertices.slice(i + 3, i + 6);
       let v2 = this.obj.vertices.slice(i + 6, i + 9);
 
-      let n0 = this.obj.normals.slice(i, i + 3);
-      let n1 = this.obj.normals.slice(i + 3, i + 6);
-      let n2 = this.obj.normals.slice(i + 6, i + 9);
-
-      let intersection = this.MollerTrumbore(rayOrigin, rayDirection, v0, v1, v2, n0, n1, n2);
-      // Return the closest intersection point found
+      let intersection = this.MollerTrumbore(rayOrigin, rayDirection, v0, v1, v2);
+      // Return the closest intersection point found along with the normal
       if (intersection != null) {
         let dist = vec3.distance(rayOrigin, intersection);
+        let normal = vec3.cross([], vec3.subtract([], v1, v0), vec3.subtract([], v2, v0));
+        vec3.normalize(normal, normal);
         if (dist < closestDist) {
           closestDist = dist;
-          closestIntersection = { point: intersection, normal: this.interpolateNormal(intersection, v0, v1, v2, n0, n1, n2) };
+          closestIntersection = { point: intersection, normal: normal };
         }
       }
     }
@@ -280,42 +278,5 @@ class Mesh {
     } else {
       return null;
     }
-  }
-
-  // Interpolate the normal at the intersection point
-  interpolateNormal(intersectionPoint, v0, v1, v2, n0, n1, n2) {
-
-    let barycentric = this.getBarycentricCoordinates(intersectionPoint, v0, v1, v2);
-    let normal = vec3.create();
-
-    vec3.scaleAndAdd(normal, normal, n0, barycentric[0]);
-    vec3.scaleAndAdd(normal, normal, n1, barycentric[1]);
-    vec3.scaleAndAdd(normal, normal, n2, barycentric[2]);
-    vec3.normalize(normal, normal);
-
-    return normal;
-  }
-
-  // Calculate the barycentric coordinates of a point on a triangle so that we can interpolate the normals
-  getBarycentricCoordinates(intersectionPoint, v0, v1, v2) {
-    let edge1 = vec3.subtract([], v1, v0);
-    let edge2 = vec3.subtract([], v2, v0);
-    let edge3 = vec3.subtract([], intersectionPoint, v0);
-
-    let dot11 = vec3.dot(edge1, edge1);
-    let dot12 = vec3.dot(edge1, edge2);
-    let dot22 = vec3.dot(edge2, edge2);
-    let dot31 = vec3.dot(edge3, edge1);
-    let dot32 = vec3.dot(edge3, edge2);
-
-    let invDenom = 1 / (dot11 * dot22 - dot12 * dot12);
-
-    let barycentric = vec3.create();
-
-    barycentric[1] = (dot22 * dot31 - dot12 * dot32) * invDenom;
-    barycentric[2] = (dot11 * dot32 - dot12 * dot31) * invDenom;
-    barycentric[0] = 1 - barycentric[1] - barycentric[2];
-
-    return barycentric;
   }
 }
