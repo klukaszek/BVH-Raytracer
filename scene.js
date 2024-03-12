@@ -6,13 +6,14 @@
 
 class Scene {
   constructor() {
-    this.canvas = document.querySelector(".myCanvas");
+    this.canvas = null;
+    this.width = 0;
+    this.height = 0;
     this.lights = [];
     this.objects = [];
     this.bvh = null;
     this.c = 0;
     this.camera = new Camera(vec3.fromValues(0, 0, 0), vec3.fromValues(1, 1, 1), 60.0 * Math.PI / 180, null, 0.01, 100.0);
-    this.camera.setAspect(this.canvas.width / this.canvas.height);
     this.camera.update();
     this._loadedObjs = [];
   }
@@ -22,6 +23,14 @@ class Scene {
   // Load a scene description from an input file
   loadSceneInfo(sceneFile) {
     this.c = 0;
+
+    // Clear the scene before loading a new one
+    this.clearScene();
+
+    // Assign the canvas and its dimensions to the scene so the web worker can access these values
+    this.width = this.canvas.width;
+    this.height = this.canvas.height;
+    this.camera.setAspect(this.canvas.width / this.canvas.height);
 
     // Split file contents into lines array. Filter out empty strings.
     let lines = sceneFile.split("\n");
@@ -47,6 +56,7 @@ class Scene {
           light.position = vec3.fromValues(...p);
           light.la = vec3.fromValues(...la);
           light.lp = vec3.fromValues(...lp);
+
         } catch (error) {
           failed = true;
           console.error("Error reading file. Make sure the format is correct.");
@@ -176,7 +186,7 @@ class Scene {
   raytrace() {
 
     let ctx = this.canvas.getContext("2d");
-    let depth = Array.from({ length: this.canvas.width * this.canvas.height }, () => Number.MAX_VALUE);
+    let depth = Array.from({ length: this.width * this.height }, () => Number.MAX_VALUE);
 
     let rayOrigin = this.camera.getPosition();
 
@@ -188,12 +198,16 @@ class Scene {
       for (let x = 0; x < this.canvas.width; x++) {
 
         // Calculate the ray direction for the current pixel
-        let rayDirection = getRayDirection(this, x, y);
+        let rayDirection = this.camera.getRayDirection(x, y, this.width, this.height);
+
+        // Initialize a new ray with a current recursion depth of 0
+        // The max recursion depth is set to 1 globally
+        let ray = new Ray(rayOrigin, rayDirection, 0);
 
         let index = y * this.canvas.width + x;
 
         // If a BVH exists, use it to intersect the ray with the scene
-        let intersection = this.bvh.intersects(this, rayOrigin, rayDirection);
+        let intersection = this.bvh.intersects(this, ray);
 
         // If the intersection point is not null, set the pixel to what was 
         // returned if the depth is less than the current depth
@@ -213,7 +227,7 @@ class Scene {
         }
       }
     }
-    
+
     console.log("Ray tracing is at line " + this.canvas.height + " of " + this.canvas.height + "...");
     console.log("Ray tracing complete.");
   }
@@ -345,26 +359,12 @@ function createTransformMatrix(t, rot, scale) {
   return transform_matrix;
 }
 
-// Return the ray direction for a given pixel on the scene canvas
-function getRayDirection(scene, x, y) {
-
-  let ndcX = (2.0 * x / scene.canvas.width) - 1.0;
-  let ndcY = 1.0 - (2.0 * y / scene.canvas.height);
-
-  let tanHalfFov = Math.tan(scene.camera.fov / 2.0);
-  let offsetX = tanHalfFov * scene.camera.aspect * ndcX;
-  let offsetY = tanHalfFov * ndcY;
-
-  let rayDirection = vec3.fromValues(offsetX, offsetY, -1.0);
-
-  vec3.normalize(rayDirection, rayDirection);
-
-  return rayDirection;
-}
-
 // Return the intersection point of a ray with an object
-function intersectPoint(rayOrigin, rayDirection, a, b, discriminant) {
+function intersectPoint(ray, a, b, discriminant) {
   let t0, t1;
+
+  let rayOrigin = ray.origin;
+  let rayDirection = ray.direction;
 
   if (discriminant > 0) {
     //find first root

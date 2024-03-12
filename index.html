@@ -41,6 +41,8 @@
 
     const scene = new Scene();
 
+    scene.canvas = canvas;
+
     async function readFiles(input) {
       scene.clearScene();
       for (let i = 0; i < input.files.length; i++) {

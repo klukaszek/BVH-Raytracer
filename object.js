@@ -5,78 +5,89 @@
 // Description: This file contains the classes for meshes, spheres, and lights 
 // This includes the raytracing functions for each object and the shading calculations
 
-class Sphere {
+const PRIMITIVE = 0;
+const MESH = 1;
+const LIGHT = 2;
+
+/* ---------------------- SceneObject Class -----------------------------*/
+
+class SceneObject {
   constructor() {
     this.position = vec3.create();
-    this.radius = 0.0;
-    this.ambient = vec3.create();
-    this.diffuse = vec3.create();
-    this.specular = vec3.create();
-    this.shiny = 0.0;
+    this.type = PRIMITIVE;
   }
 
+  // This function should return a dictionary with the minimum and maximum bounds of the object as Vec3s
   getExtents() {
-    let min = vec3.subtract([], this.position, vec3.fromValues(this.radius, this.radius, this.radius));
-    let max = vec3.add([], this.position, vec3.fromValues(this.radius, this.radius, this.radius));
-    return { min: min, max: max };
+    throw new Error('getExtents not implemented for ' + typeof (this));
+  }
+
+  // This function should return the intersection point of a ray with the object and the normal of the intersection
+  intersects() {
+    throw new Error('intersects not implemented for ' + typeof (this));
   }
 
   // Ray trace a given point on a sphere
-  raytrace(scene, rayOrigin, rayDirection) {
+  raytrace(scene, ray) {
 
-    let intersection = this.sphereIntersect(rayOrigin, rayDirection);
+    if (this.type == LIGHT) return null;
+
+    // Get the intersection point and normal of the ray with the sphere
+    let intersection = this.intersects(ray);
+
+    // If no info is returned, return null
+    if (intersection == null) return null;
 
     let pixel = null;
 
     let dist = Number.MAX_VALUE;
-    if (intersection != null) {
-      dist = vec3.distance(rayOrigin, intersection);
-      pixel = this.calculateShading(intersection, rayOrigin, scene.lights);
+
+    // Return the distance and pixel colour for the intersection point so that 
+    // we can assign the pixel colour to the canvas if it passes the depth test
+    if (intersection.point != null) {
+
+      // Calculate vector from intersection to light
+      dist = vec3.distance(ray.origin, intersection.point);
+      pixel = this.calculateShading(scene, intersection.point, ray, intersection.normal);
+      return { pixel: pixel, dist: dist };
     }
 
-    return { pixel: pixel, dist: dist };
+    // If no intersection, return null
+    return null;
   }
 
-  // Return the intersection point of a ray with the sphere
-  sphereIntersect(rayOrigin, rayDirection) {
+  // Calculate the pixel colour for the current pixel of the SceneObject that is being raytraced
+  calculateShading(scene, intersection, ray, normal) {
 
-    let a = 1.0;
-    let oc = vec3.subtract([], rayOrigin, this.position);
-    let b = 2.0 * vec3.dot(rayDirection, oc);
-    let c = vec3.dot(oc, oc) - this.radius * this.radius;
-    let discriminant = b * b - 4.0 * a * c;
+    // If the object is a light we ignore
+    if (this.type == LIGHT) return null;
 
-    // If a root exists, return the intersection point
-    if (discriminant > 0) {
-      return intersectPoint(rayOrigin, rayDirection, a, b, discriminant);
-    } else if (discriminant == 0) {
-      return null;
-    }
-  }
+    // Get the lights in the scene
+    let lights = scene.lights;
 
-  // Determine the shading at a given intersection point
-  calculateShading(intersection, rayOrigin, lights) {
-
-    let center = this.position;
-
-    let normal = vec3.normalize([], vec3.subtract([], intersection, center));
-    let view = vec3.normalize([], vec3.subtract([], rayOrigin, intersection));
-
+    // Store the final pixel colour for the intersection point
     let result = vec3.fromValues(0, 0, 0);
+
+    // Iterate through each light in the scene and add the light contribution to the pixel
     for (let i = 0; i < lights.length; i++) {
 
-      let pixel = vec3.fromValues(0, 0, 0);
+      let pixel = vec3.create();
       let lightPos = lights[i].position;
       let lightAmbient = lights[i].la;
       let lightColor = lights[i].lp;
 
+      let ambientColor = vec3.create();
+      let diffuseColor = vec3.create();
+      let specularColor = vec3.create();
+
       let lightDir = vec3.normalize([], vec3.subtract([], lightPos, intersection));
 
-      let ambientColor = vec3.multiply([], this.ambient, lightAmbient);
+      // Calculate ambient light
+      ambientColor = vec3.multiply([], this.ambient, lightAmbient);
 
       // Calculate the diffuse component
       let nDotL = vec3.dot(normal, lightDir);
-      let diffuseColor = vec3.multiply([], this.diffuse, lightColor);
+      diffuseColor = vec3.multiply([], this.diffuse, lightColor);
       vec3.scale(diffuseColor, diffuseColor, nDotL);
 
       // Calculate the reflection direction
@@ -85,12 +96,15 @@ class Sphere {
       vec3.subtract(reflectDir, reflectDir, lightDir);
       vec3.normalize(reflectDir, reflectDir);
 
+      // Get the view direction to the intersection point
+      let view = vec3.normalize([], vec3.subtract([], ray.origin, intersection));
+
       // Calculate the specular component
       let spec = Math.pow(Math.max(vec3.dot(view, reflectDir), 0), this.shiny);
-      let specularColor = vec3.multiply([], this.specular, lightColor);
+      specularColor = vec3.multiply([], this.specular, lightColor);
       vec3.scale(specularColor, specularColor, spec);
 
-      // Add the ambient, diffuse, and specular components to the pixel
+      // Add ambient, diffuse, and specular components
       vec3.add(pixel, pixel, ambientColor);
       vec3.add(pixel, pixel, diffuseColor);
       vec3.add(pixel, pixel, specularColor);
@@ -99,26 +113,64 @@ class Sphere {
       vec3.add(result, result, pixel);
     }
 
-    // Multiply the pixel by 255 to get the final color for canvas
+    // Multiply the pixel by 254 to get the final color for canvas
     vec3.multiply(result, result, vec3.fromValues(255.0, 255.0, 255.0));
     return result;
   }
 }
 
-class PointLight {
+/* ---------------------- Sphere -----------------------------*/
+
+class Sphere extends SceneObject {
   constructor() {
-    this.position = vec3.create();
-    this.la = vec3.create(); // ambient colour
-    this.lp = vec3.create(); // point light colour
+    super();
+    this.radius = 0.0;
+    this.ambient = vec3.create();
+    this.diffuse = vec3.create();
+    this.specular = vec3.create();
+    this.shiny = 0.0;
+    this.type = PRIMITIVE;
+  }
+
+  // Return the minimum and maximum bounds of the sphere so that it can be used in the BVH
+  getExtents() {
+    let min = vec3.subtract([], this.position, vec3.fromValues(this.radius, this.radius, this.radius));
+    let max = vec3.add([], this.position, vec3.fromValues(this.radius, this.radius, this.radius));
+    return { min: min, max: max };
+  }
+
+  // Return the intersection point of a ray with the sphere
+  intersects(ray) {
+
+    let rayOrigin = ray.origin;
+    let rayDirection = ray.direction;
+
+    let a = 1.0;
+    let oc = vec3.subtract([], rayOrigin, this.position);
+    let b = 2.0 * vec3.dot(rayDirection, oc);
+    let c = vec3.dot(oc, oc) - this.radius * this.radius;
+    let discriminant = b * b - 4.0 * a * c;
+
+    // If a root exists, return the intersection point
+    if (discriminant >= 0) {
+      let intersection = intersectPoint(ray, a, b, discriminant);
+      let normal = vec3.subtract([], intersection, this.position);
+      vec3.normalize(normal, normal);
+      return { point: intersection, normal: normal };
+      // Otherwise, return null
+    } else {
+      return null;
+    }
+
   }
 }
 
 /* ---------------------- Mesh -----------------------------*/
 
-class Mesh {
+class Mesh extends SceneObject {
   constructor() {
+    super();
     this.obj = new Obj();
-    this.position = vec3.create();
     this.rotation = vec3.create();
     this.scale = 1.0;
     this.transform = mat4.create();
@@ -126,8 +178,10 @@ class Mesh {
     this.diffuse = vec3.create();
     this.specular = vec3.create();
     this.shiny = 0.0;
+    this.type = MESH;
   }
 
+  // Return the minimum and maximum bounds of the mesh so that it can be used in the BVH
   getExtents() {
 
     let min = [Infinity, Infinity, Infinity];
@@ -146,81 +200,22 @@ class Mesh {
     return { min: min, max: max };
   }
 
-  // I was having trouble with raytracing the mesh in the shaders, so I decided to raytrace the mesh in js
-  raytrace(scene, rayOrigin, rayDirection) {
-
-    let intersection = this.intersectRayTriangle(rayOrigin, rayDirection);
-
-    let pixel = null
-    let dist = Number.MAX_VALUE;
-    if (intersection != null) {
-      pixel = this.calculateShading(intersection.point, rayOrigin, scene.lights, intersection.normal);
-      dist = vec3.distance(rayOrigin, intersection.point);
-    }
-
-    return { pixel: pixel, dist: dist };
-  }
-
-  // Calculate the shading for the current pixel
-  calculateShading(intersection, rayOrigin, lights, normal) {
-
-    let view = vec3.normalize([], vec3.subtract([], rayOrigin, intersection));
-
-    let result = vec3.fromValues(0, 0, 0);
-    for (let i = 0; i < lights.length; i++) {
-
-      let pixel = vec3.fromValues(0, 0, 0);
-      let lightPos = lights[i].position;
-      let lightAmbient = lights[i].la;
-      let lightColor = lights[i].lp;
-
-      let lightDir = vec3.normalize([], vec3.subtract([], lightPos, intersection));
-
-      let ambientColor = vec3.multiply([], this.ambient, lightAmbient);
-
-      // Calculate the diffuse component
-      let nDotL = vec3.dot(normal, lightDir);
-      let diffuseColor = vec3.multiply([], this.diffuse, lightColor);
-      vec3.scale(diffuseColor, diffuseColor, nDotL);
-
-      // Calculate the reflection direction
-      let temp = 2.0 * nDotL;
-      let reflectDir = vec3.scale([], normal, temp);
-      vec3.subtract(reflectDir, reflectDir, lightDir);
-      vec3.normalize(reflectDir, reflectDir);
-
-      // Calculate the specular component
-      let spec = Math.pow(Math.max(vec3.dot(view, reflectDir), 0), this.shiny);
-      let specularColor = vec3.multiply([], this.specular, lightColor);
-      vec3.scale(specularColor, specularColor, spec);
-
-      // Add the ambient, diffuse, and specular components to the pixel
-      vec3.add(pixel, pixel, ambientColor);
-      vec3.add(pixel, pixel, diffuseColor);
-      vec3.add(pixel, pixel, specularColor);
-
-      // Add light contribution to the result
-      vec3.add(result, result, pixel);
-    }
-
-    // Multiply the pixel by 255 to get the final color for canvas 
-    vec3.multiply(result, result, vec3.fromValues(255.0, 255.0, 255.0));
-    return result;
-  }
-
-  // Return the intersection point of a ray with the meshes
-  intersectRayTriangle(rayOrigin, rayDirection) {
+  // Return the intersection point of a ray with the meshes triangles, along with the normal of the intersection
+  intersects(ray) {
 
     let closestIntersection = null;
     let closestDist = Number.MAX_VALUE;
 
+    let rayOrigin = ray.origin;
+
+    // Loop through each triangle in the mesh and find the closest intersection point
     for (let i = 0; i < this.obj.vertices.length; i += 9) {
 
       let v0 = this.obj.vertices.slice(i, i + 3);
       let v1 = this.obj.vertices.slice(i + 3, i + 6);
       let v2 = this.obj.vertices.slice(i + 6, i + 9);
 
-      let intersection = this.MollerTrumbore(rayOrigin, rayDirection, v0, v1, v2);
+      let intersection = this.MollerTrumbore(ray, v0, v1, v2);
       // Return the closest intersection point found along with the normal of the intersection
       if (intersection != null) {
         let dist = vec3.distance(rayOrigin, intersection);
@@ -240,45 +235,77 @@ class Mesh {
 
 
   // Find if a ray intersects a triangle
-  MollerTrumbore(rayOrigin, rayDirection, v0, v1, v2) {
-    var epsilon = 0.000001;
+  MollerTrumbore(ray, v0, v1, v2) {
+    let epsilon = 0.000001;
+
+    let rayOrigin = ray.origin;
+    let rayDirection = ray.direction;
 
     // Find edges of the triangle
-    var edge1 = vec3.subtract([], v1, v0);
-    var edge2 = vec3.subtract([], v2, v0);
+    let edge1 = vec3.subtract([], v1, v0);
+    let edge2 = vec3.subtract([], v2, v0);
 
     // Calculate determinant
-    var h = vec3.cross([], rayDirection, edge2);
-    var a = vec3.dot(edge1, h);
+    let h = vec3.cross([], rayDirection, edge2);
+    let a = vec3.dot(edge1, h);
 
     // If determinant is near zero, ray lies in plane of triangle
     if (a > -epsilon && a < epsilon) {
       return null;
     }
 
-    var f = 1 / a;
-    var s = vec3.subtract([], rayOrigin, v0);
-    var u = f * vec3.dot(s, h);
+    let f = 1 / a;
+    let s = vec3.subtract([], rayOrigin, v0);
+    let u = f * vec3.dot(s, h);
 
     if (u < 0 || u > 1) {
       return null;
     }
 
-    var q = vec3.cross([], s, edge1);
-    var v = f * vec3.dot(rayDirection, q);
+    let q = vec3.cross([], s, edge1);
+    let v = f * vec3.dot(rayDirection, q);
 
     if (v < 0 || u + v > 1) {
       return null;
     }
 
-    var t = f * vec3.dot(edge2, q);
+    let t = f * vec3.dot(edge2, q);
 
     if (t > epsilon) {
-      var intersectionPoint = vec3.scaleAndAdd([], rayOrigin, rayDirection, t);
+      let intersectionPoint = vec3.scaleAndAdd([], rayOrigin, rayDirection, t);
 
       return intersectionPoint;
     } else {
       return null;
     }
   }
+}
+
+/* ---------------------- Point Light -----------------------------*/
+
+class PointLight extends SceneObject {
+  constructor() {
+    super(); // position
+    this.la = vec3.create(); // ambient colour
+    this.lp = vec3.create(); // point light colour
+    this.type = LIGHT;
+  }
+}
+
+
+// Find closest object to the intersection point
+function sortObjectsByDistanceFromPoint(objects, intersectionPoint) {
+  // Calculate distances and store them along with objects
+  let distancesAndObjects = objects.map(object => {
+    let distance = vec3.distance(object.position, intersectionPoint); // Assuming object.center is the center of the object
+    return { distance, object };
+  });
+
+  // Sort the array based on distances
+  distancesAndObjects.sort((a, b) => a.distance - b.distance);
+
+  // Retrieve sorted objects
+  let sortedObjects = distancesAndObjects.map(item => item.object);
+
+  return sortedObjects;
 }

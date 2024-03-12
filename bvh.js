@@ -5,6 +5,15 @@
 // Description: This file contains the class for a BHV node 
 // and the functions to build the BVH tree using the objects in the scene
 
+const MAX_RECURSION_DEPTH = 1;
+
+class Ray {
+  constructor(origin, direction, recursionDepth) {
+    this.origin = origin;
+    this.direction = direction;
+    this.recursionDepth = recursionDepth;
+  }
+}
 
 // Create a bvh node for the bvh tree
 class BVHNode {
@@ -16,24 +25,24 @@ class BVHNode {
   }
 
   // Check if a ray intersects the bounding box, and if it happens to be a leaf node we get the pixel colour and distance from the object
-  intersects(scene, rayOrigin, rayDirection) {
+  intersects(scene, ray) {
 
     // If no intersection with the bounding box, return null
-    if (!this.boundingBoxIntersect(rayOrigin, rayDirection)) {
+    if (!this.boundingBoxIntersect(ray)) {
       return null;
     }
 
     // If the node is a leaf, check if the ray intersects the object and return the result (pixel colour and distance)
     if (this.object) {
-      return this.object.raytrace(scene, rayOrigin, rayDirection);
+      return this.object.raytrace(scene, ray);
     }
 
     // Check both children for intersections with the ray
-    let leftLeaf = this.left.intersects(scene, rayOrigin, rayDirection);
+    let leftLeaf = this.left.intersects(scene, ray);
 
     // Otherwise, we return the right leaf
     if (leftLeaf != null) {
-      let rightLeaf = this.right.intersects(scene, rayOrigin, rayDirection);
+      let rightLeaf = this.right.intersects(scene, ray);
 
       // If the right leaf is closer, return it
       if (rightLeaf != null) {
@@ -45,12 +54,15 @@ class BVHNode {
       return leftLeaf;
 
     } else {
-      return this.right.intersects(scene, rayOrigin, rayDirection);
+      return this.right.intersects(scene, ray);
     }
   }
 
   // Check if a ray intersects the bounding box
-  boundingBoxIntersect(rayOrigin, rayDirection) {
+  boundingBoxIntersect(ray) {
+
+    let rayOrigin = ray.origin;
+    let rayDirection = ray.direction;
 
     // Calculate intersection parameters (t-values) for the x-axis
     let tmin = (this.boundingBox.min[0] - rayOrigin[0]) / rayDirection[0];
@@ -152,7 +164,7 @@ function calculateBoundingBox(objects) {
 
     // Find bounds of a box that encapsulates the objects
     let extents = object.getExtents();
-    
+
     if (extents == null) continue;
 
     let minExt = extents.min;
@@ -190,4 +202,3 @@ function partitionObjects(objects, boundingBox) {
 
   return { left: left, right: right };
 }
-

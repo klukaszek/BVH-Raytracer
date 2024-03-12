@@ -55,33 +55,20 @@ class Camera {
     return mat4.perspective([], this.fov, this.aspect, this.near, this.far);
   }
 
-  calculateRayDirection(x, y, width, height) {
-  
-    // Convert x and y to the range -1 to 1
-    const x_ndc = (2 * x) / width - 1;
-    const y_ndc = 1 - (2 * y) / height;
-  
-    // Convert x and y to the range -1 to 1
-    const x_clip = x_ndc;
-    const y_clip = y_ndc;
-  
-    // Convert x and y to the range -1 to 1
-    const x_eye = x_clip;
-    const y_eye = y_clip;
-    const z_eye = -1;
-  
-    // Convert to homogeneous coordinates
-    const ray_eye = vec4.fromValues(x_eye, y_eye, z_eye, 0);
-  
-    // Convert to world coordinates
-    const ray_world = vec4.create();
-    vec4.transformMat4(ray_world, ray_eye, this.transform);
-  
-    // Convert to vec3
-    const ray = vec3.fromValues(ray_world[0], ray_world[1], ray_world[2]);
-    vec3.normalize(ray, ray);
-  
-    return ray;
+  getRayDirection(x, y, width, height) {
+
+    let ndcX = (2.0 * x / width) - 1.0;
+    let ndcY = 1.0 - (2.0 * y / height);
+
+    let tanHalfFov = Math.tan(this.fov / 2.0);
+    let offsetX = tanHalfFov * this.aspect * ndcX;
+    let offsetY = tanHalfFov * ndcY;
+
+    let rayDirection = vec3.fromValues(offsetX, offsetY, -1.0);
+
+    vec3.normalize(rayDirection, rayDirection);
+
+    return rayDirection;
 
   }
 
@@ -341,3 +328,4 @@ class Camera {
 // I should have probably made a rotateX, rotateY, rotateZ function that calls 
 // the appropriate function and then updates the angle vector
 //camera.angles[1] = Math.PI / 2;
+//
