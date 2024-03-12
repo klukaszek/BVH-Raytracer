@@ -224,6 +224,8 @@ class Mesh {
       // Return the closest intersection point found along with the normal
       if (intersection != null) {
         let dist = vec3.distance(rayOrigin, intersection);
+
+        // Calculate the normal of the triangle
         let normal = vec3.cross([], vec3.subtract([], v1, v0), vec3.subtract([], v2, v0));
         vec3.normalize(normal, normal);
         if (dist < closestDist) {
