@@ -85,6 +85,13 @@ class SceneObject {
       // Calculate ambient light
       ambientColor = vec3.multiply([], this.ambient, lightAmbient);
 
+      if (this.isInShadow(scene, intersection, normal, lightPos)) {
+        vec3.scale(ambientColor, ambientColor, 0.5);
+        vec3.add(pixel, pixel, ambientColor);
+        vec3.add(result, result, pixel);
+        continue;
+      }
+
       // Calculate the diffuse component
       let nDotL = vec3.dot(normal, lightDir);
       diffuseColor = vec3.multiply([], this.diffuse, lightColor);
@@ -116,6 +123,40 @@ class SceneObject {
     // Multiply the pixel by 254 to get the final color for canvas
     vec3.multiply(result, result, vec3.fromValues(255.0, 255.0, 255.0));
     return result;
+  }
+
+  isInShadow(scene, intersection, normal, lightPos) {
+
+    let rayDirection = vec3.subtract([], lightPos, intersection);
+    let distance = vec3.length(rayDirection);
+    vec3.normalize(rayDirection, rayDirection);
+
+    let shadowRay = new Ray(intersection, rayDirection);
+
+    shadowRay.origin = vec3.scaleAndAdd([], shadowRay.origin, normal, 0.0001);
+  
+    //console.log(this.position);
+
+    for (let i = 0; i < scene.objects.length; i++) {
+
+      if (scene.objects[i] != this) {
+        //console.log("Object: " + scene.objects[i].position);
+
+        let new_intersection = scene.objects[i].intersects(shadowRay);
+
+        if (new_intersection != null) {
+          let dist = vec3.distance(shadowRay.origin, new_intersection.point);
+          if (dist < distance) {
+            // console.log("Light Position: " + lightPos);
+            // console.log("Intersection: " + intersection);
+            // console.log("Distance: " + distance);
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
   }
 }
 
@@ -308,4 +349,40 @@ function sortObjectsByDistanceFromPoint(objects, intersectionPoint) {
   let sortedObjects = distancesAndObjects.map(item => item.object);
 
   return sortedObjects;
+}
+
+// Return the intersection point of a ray with an object
+function intersectPoint(ray, a, b, discriminant) {
+  let t0, t1;
+
+  let rayOrigin = ray.origin;
+  let rayDirection = ray.direction;
+
+  if (discriminant > 0) {
+    //find first root
+    t0 = (-b - Math.sqrt(discriminant)) / (2.0 * a);
+
+    // Calculate second root and find closest intersection point
+    if (discriminant > 1) {
+      // find root 2
+      t1 = (-b + Math.sqrt(discriminant)) / (2.0 * a);
+
+      let ri0 = vec3.scaleAndAdd([], rayOrigin, rayDirection, t0);
+      let ri1 = vec3.scaleAndAdd([], rayOrigin, rayDirection, t1);
+
+      let dist0 = vec3.distance(rayOrigin, ri0);
+      let dist1 = vec3.distance(rayOrigin, ri1);
+
+      // Get minimum between the two distances
+      let closest = dist0 < dist1 ? ri0 : ri1;
+
+      // Return the closest intersection point to the ray origin
+      if (closest === ri0) {
+        return ri0;
+      }
+      else return ri1;
+    }
+    // ro + (rd * t0)
+    return vec3.scaleAndAdd([], rayOrigin, rayDirection, t0);
+  }
 }

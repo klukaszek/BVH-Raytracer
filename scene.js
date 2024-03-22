@@ -358,39 +358,3 @@ function createTransformMatrix(t, rot, scale) {
   mat4.scale(transform_matrix, transform_matrix, vec3.fromValues(scale, scale, scale));
   return transform_matrix;
 }
-
-// Return the intersection point of a ray with an object
-function intersectPoint(ray, a, b, discriminant) {
-  let t0, t1;
-
-  let rayOrigin = ray.origin;
-  let rayDirection = ray.direction;
-
-  if (discriminant > 0) {
-    //find first root
-    t0 = (-b - Math.sqrt(discriminant)) / (2.0 * a);
-
-    // Calculate second root and find closest intersection point
-    if (discriminant > 1) {
-      // find root 2
-      t1 = (-b + Math.sqrt(discriminant)) / (2.0 * a);
-
-      let ri0 = vec3.scaleAndAdd([], rayOrigin, rayDirection, t0);
-      let ri1 = vec3.scaleAndAdd([], rayOrigin, rayDirection, t1);
-
-      let dist0 = vec3.distance(rayOrigin, ri0);
-      let dist1 = vec3.distance(rayOrigin, ri1);
-
-      // Get minimum between the two distances
-      let closest = dist0 < dist1 ? ri0 : ri1;
-
-      // Return the closest intersection point to the ray origin
-      if (closest === ri0) {
-        return ri0;
-      }
-      else return ri1;
-    }
-    // ro + (rd * t0)
-    return vec3.scaleAndAdd([], rayOrigin, rayDirection, t0);
-  }
-}
