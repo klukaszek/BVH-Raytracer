@@ -29,7 +29,8 @@ class SceneObject {
 
   // Ray trace a given point on a sphere
   raytrace(scene, ray) {
-
+    
+    // A light scene object is not raytraced
     if (this.type == LIGHT) return null;
 
     // Get the intersection point and normal of the ray with the sphere
@@ -66,7 +67,7 @@ class SceneObject {
     let lights = scene.lights;
 
     // Store the final pixel colour for the intersection point
-    let result = vec3.fromValues(0, 0, 0);
+    let result = vec3.create();
 
     // Iterate through each light in the scene and add the light contribution to the pixel
     for (let i = 0; i < lights.length; i++) {
@@ -80,13 +81,14 @@ class SceneObject {
       let diffuseColor = vec3.create();
       let specularColor = vec3.create();
 
+      // Calculate the light direction
       let lightDir = vec3.normalize([], vec3.subtract([], lightPos, intersection));
 
       // Calculate ambient light
       ambientColor = vec3.multiply([], this.ambient, lightAmbient);
 
+      // Check if the intersection point is in shadow
       if (this.isInShadow(scene, intersection, normal, lightPos)) {
-        vec3.scale(ambientColor, ambientColor, 0.5);
         vec3.add(pixel, pixel, ambientColor);
         vec3.add(result, result, pixel);
         continue;
@@ -100,6 +102,7 @@ class SceneObject {
       // Calculate the reflection direction
       let temp = 2.0 * nDotL;
       let reflectDir = vec3.scale([], normal, temp);
+      // Consider using the viewing vector over the light direction for actual reflection calculations
       vec3.subtract(reflectDir, reflectDir, lightDir);
       vec3.normalize(reflectDir, reflectDir);
 
@@ -107,7 +110,7 @@ class SceneObject {
       let view = vec3.normalize([], vec3.subtract([], ray.origin, intersection));
 
       // Calculate the specular component
-      let spec = Math.pow(Math.max(vec3.dot(view, reflectDir), 0), this.shiny);
+      let spec = Math.pow(Math.max(vec3.dot(reflectDir, view), 0), 32.0);
       specularColor = vec3.multiply([], this.specular, lightColor);
       vec3.scale(specularColor, specularColor, spec);
 
@@ -120,42 +123,28 @@ class SceneObject {
       vec3.add(result, result, pixel);
     }
 
-    // Multiply the pixel by 254 to get the final color for canvas
+    // Multiply the pixel by 255 to get the final color for canvas
     vec3.multiply(result, result, vec3.fromValues(255.0, 255.0, 255.0));
     return result;
   }
 
   isInShadow(scene, intersection, normal, lightPos) {
 
+    // Get ray from intersection to light
     let rayDirection = vec3.subtract([], lightPos, intersection);
-    let distance = vec3.length(rayDirection);
     vec3.normalize(rayDirection, rayDirection);
 
     let shadowRay = new Ray(intersection, rayDirection);
 
+    // I was getting some "shadow acne" and applying a small offset to the shadow ray origin fixed it
     shadowRay.origin = vec3.scaleAndAdd([], shadowRay.origin, normal, 0.0001);
-  
-    //console.log(this.position);
-
-    for (let i = 0; i < scene.objects.length; i++) {
-
-      if (scene.objects[i] != this) {
-        //console.log("Object: " + scene.objects[i].position);
-
-        let new_intersection = scene.objects[i].intersects(shadowRay);
-
-        if (new_intersection != null) {
-          let dist = vec3.distance(shadowRay.origin, new_intersection.point);
-          if (dist < distance) {
-            // console.log("Light Position: " + lightPos);
-            // console.log("Intersection: " + intersection);
-            // console.log("Distance: " + distance);
-            return true;
-          }
-        }
-      }
+    
+    // Check if the shadow ray intersects with an object in the BVH tree
+    if (scene.bvh.intersects(scene, shadowRay, true)) {
+      return true;
     }
-
+    
+    // If no intersection, return false
     return false;
   }
 }
@@ -182,11 +171,11 @@ class Sphere extends SceneObject {
 
   // Return the intersection point of a ray with the sphere
   intersects(ray) {
-
     let rayOrigin = ray.origin;
     let rayDirection = ray.direction;
 
     let a = 1.0;
+
     let oc = vec3.subtract([], rayOrigin, this.position);
     let b = 2.0 * vec3.dot(rayDirection, oc);
     let c = vec3.dot(oc, oc) - this.radius * this.radius;
@@ -195,14 +184,13 @@ class Sphere extends SceneObject {
     // If a root exists, return the intersection point
     if (discriminant >= 0) {
       let intersection = intersectPoint(ray, a, b, discriminant);
-      let normal = vec3.subtract([], intersection, this.position);
-      vec3.normalize(normal, normal);
+      if (intersection == null) return null;
+      let normal = vec3.normalize([], vec3.subtract([], intersection, this.position));
       return { point: intersection, normal: normal };
       // Otherwise, return null
     } else {
       return null;
     }
-
   }
 }
 
@@ -366,6 +354,9 @@ function intersectPoint(ray, a, b, discriminant) {
     if (discriminant > 1) {
       // find root 2
       t1 = (-b + Math.sqrt(discriminant)) / (2.0 * a);
+      
+      // We check if t0 and t1 are negative because negative values result in shadows that are not supposed to exist in the scene
+      if (t0 < 0 && t1 < 0) return null;
 
       let ri0 = vec3.scaleAndAdd([], rayOrigin, rayDirection, t0);
       let ri1 = vec3.scaleAndAdd([], rayOrigin, rayDirection, t1);
@@ -374,7 +365,7 @@ function intersectPoint(ray, a, b, discriminant) {
       let dist1 = vec3.distance(rayOrigin, ri1);
 
       // Get minimum between the two distances
-      let closest = dist0 < dist1 ? ri0 : ri1;
+      let closest = (dist0 < dist1) ? ri0 : ri1;
 
       // Return the closest intersection point to the ray origin
       if (closest === ri0) {
@@ -382,6 +373,10 @@ function intersectPoint(ray, a, b, discriminant) {
       }
       else return ri1;
     }
+    
+    // We check if t0 is negative because negative values result in shadows that are not supposed to exist in the scene
+    if (t0 < 0) return null;
+
     // ro + (rd * t0)
     return vec3.scaleAndAdd([], rayOrigin, rayDirection, t0);
   }

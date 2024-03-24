@@ -25,6 +25,7 @@ class BVHNode {
   }
 
   // Check if a ray intersects the bounding box, and if it happens to be a leaf node we get the pixel colour and distance from the object
+  // If the test flag is set to true, we only check if the ray intersects an object and ignore the pixel colour
   intersects(scene, ray, test = false) {
 
     // If no intersection with the bounding box, return null
@@ -34,16 +35,16 @@ class BVHNode {
 
     // If the node is a leaf, check if the ray intersects the object and return the result (pixel colour and distance)
     if (this.object) {
-      if (test) return this.object.intersects(scene, ray);
+      if (test) return this.object.intersects(ray);
       return this.object.raytrace(scene, ray);
     }
 
     // Check both children for intersections with the ray
-    let leftLeaf = this.left.intersects(scene, ray);
+    let leftLeaf = this.left.intersects(scene, ray, test);
 
     // Otherwise, we return the right leaf
     if (leftLeaf != null) {
-      let rightLeaf = this.right.intersects(scene, ray);
+      let rightLeaf = this.right.intersects(scene, ray, test);
 
       // If the right leaf is closer, return it
       if (rightLeaf != null) {
@@ -55,7 +56,7 @@ class BVHNode {
       return leftLeaf;
 
     } else {
-      return this.right.intersects(scene, ray);
+      return this.right.intersects(scene, ray, test);
     }
   }
 
