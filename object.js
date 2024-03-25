@@ -77,13 +77,17 @@ class SceneObject {
     let lights = scene.lights;
 
     // Store the final pixel colour for the intersection point
-    let result = vec3.create();
+    let result = vec3.fromValues(0.0, 0.0, 0.0);
+
+    // Get the view direction to the intersection point
+    let viewDir = vec3.normalize([], vec3.subtract([], ray.origin, intersection));
+    let nDotV = vec3.dot(normal, viewDir);
 
     // Iterate through each light in the scene and add the light contribution to the pixel
     // At the moment, we are only considering 1 point light, however, we can implement light intensity to solve this issue in the future
     for (let i = 0; i < lights.length; i++) {
 
-      let pixel = vec3.create();
+      let pixel = vec3.fromValues(0.0, 0.0, 0.0);
       let lightPos = lights[i].position;
       let lightAmbient = lights[i].la;
       let lightColor = lights[i].lp;
@@ -105,10 +109,6 @@ class SceneObject {
       vec3.subtract(reflectDir, reflectDir, lightDir);
       vec3.normalize(reflectDir, reflectDir);
 
-      // Get the view direction to the intersection point
-      let viewDir = vec3.normalize([], vec3.subtract([], ray.origin, intersection));
-      let nDotV = vec3.dot(normal, viewDir);
-
       // Calculate ambient light
       ambientColor = vec3.multiply([], this.ambient, lightAmbient);
 
@@ -119,21 +119,15 @@ class SceneObject {
         // We calculate reflection if the surface has a shiny value that is not 0
         if (this.shiny > 0.0 && recursionDepth < 1) {
 
-          // Recalculate the reflection direction using the view direction instead of the light direction
-          // because raytracing is a backwards process and we are calculating the reflection from the view direction
-          temp = 2.0 * nDotV;
-          reflectDir = vec3.scale([], normal, temp);
-          vec3.subtract(reflectDir, reflectDir, viewDir);
-          vec3.normalize(reflectDir, reflectDir);
           // Get the reflection color if it exists
-          let col = this.calculateReflection(scene, intersection, normal, reflectDir, recursionDepth + 1);
+          let col = this.calculateReflection(scene, intersection, normal, viewDir, recursionDepth + 1);
 
           // apply linear interpolation between the pixel and the reflection color based on the shiny value
           if (col != null) {
             vec3.lerp(pixel, pixel, col, this.shiny);
           }
         }
-        
+
         // Add light contribution to the result
         vec3.add(result, result, pixel);
         continue;
@@ -157,15 +151,8 @@ class SceneObject {
       // We calculate reflection if the surface has a shiny value that is not 0
       if (this.shiny > 0.0 && recursionDepth < 1) {
 
-        // Recalculate the reflection direction using the view direction instead of the light direction
-        // because raytracing is a backwards process and we are calculating the reflection from the view direction
-        temp = 2.0 * nDotV;
-        reflectDir = vec3.scale([], normal, temp);
-        vec3.subtract(reflectDir, reflectDir, viewDir);
-        vec3.normalize(reflectDir, reflectDir);
-
         // Get the reflection color if it exists
-        let col = this.calculateReflection(scene, intersection, normal, reflectDir, recursionDepth);
+        let col = this.calculateReflection(scene, intersection, normal, viewDir, recursionDepth);
 
         // apply linear interpolation between the pixel and the reflection color based on the shiny value
         if (col != null) {
@@ -186,7 +173,8 @@ class SceneObject {
     // Get ray from intersection to light
     let rayDirection = vec3.subtract([], lightPos, intersection);
     vec3.normalize(rayDirection, rayDirection);
-
+    
+    // Create a shadow ray using the intersection point and the light direction
     let shadowRay = new Ray(intersection, rayDirection);
 
     // I was getting some "shadow acne" and applying a small offset to the shadow ray origin fixed it
@@ -201,8 +189,15 @@ class SceneObject {
     return false;
   }
 
-  // Calculate the reflection color of a ray with the object
-  calculateReflection(scene, intersection, normal, reflectDir, recursionDepth) {
+  // Calculate the reflection color of a ray intersecting with an object
+  calculateReflection(scene, intersection, normal, viewDir, recursionDepth) {
+    // Calculate the reflection direction using the view direction instead of the light direction
+    // because raytracing is a backwards process and we are calculating the reflection from the view direction
+    let nDotV = vec3.dot(normal, viewDir);
+    let temp = 2.0 * nDotV;
+    let reflectDir = vec3.scale([], normal, temp);
+    vec3.subtract(reflectDir, reflectDir, viewDir);
+    vec3.normalize(reflectDir, reflectDir);
 
     // Create a reflection ray using the intersection point and the reflection direction
     let reflectRay = new Ray(intersection, reflectDir);
