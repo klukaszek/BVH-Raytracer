@@ -18,6 +18,8 @@ Shadows and reflections are properly rendered with a recursion depth of 1.
 
 The camera can be adjusted at the very top of the scene.js file. By default, the camera is at (0, 0, 0) and renders based on NDC. If you enable the perspective flag at the top of scene.js, the scene will render with a perspective camera that has an adjustable FOV.
 
+If there are any noticeable jagged edges on meshes, this is caused by the rotation floating point values being weird in JavaScript. Normally enabling perspective camera fixes this, or increasing the canvas resolution.
+
 I have encountered a bug that I have not yet been able to reproduce where the program crashes after finishing rendering because it tried to draw a pixel outside of the canvas. This has never happened again but if it does happen while testing it, just refresh the page and it should be fine.
 
 The developer console contains all information used in the rendering process so that it can be easily inspected. This includes OBJ files, BVH Tree, and the Scene hierarchy.
