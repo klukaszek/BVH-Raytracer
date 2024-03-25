@@ -9,6 +9,18 @@ const PRIMITIVE = 0;
 const MESH = 1;
 const LIGHT = 2;
 
+// This is an extended function for gl-matrix
+// Clamp all vector values between a minimum and maximum value
+vec3.clamp = function(result, min, max) {
+
+  result[0] = result[0] < min ? min : result[0] > max ? max : result[0];
+  result[1] = result[1] < min ? min : result[1] > max ? max : result[1];
+  result[2] = result[2] < min ? min : result[2] > max ? max : result[2];
+
+  return result;
+
+}
+
 /* ---------------------- SceneObject Class -----------------------------*/
 
 class SceneObject {
@@ -29,7 +41,7 @@ class SceneObject {
 
   // Ray trace a given point on a sphere
   raytrace(scene, ray) {
-    
+
     // A light scene object is not raytraced
     if (this.type == LIGHT) return null;
 
@@ -46,9 +58,7 @@ class SceneObject {
     // Return the distance and pixel colour for the intersection point so that 
     // we can assign the pixel colour to the canvas if it passes the depth test
     if (intersection.point != null) {
-
-      // Calculate vector from intersection to light
-      dist = vec3.distance(ray.origin, intersection.point);
+      dist = intersection.dist;
       pixel = this.calculateShading(scene, intersection.point, ray, intersection.normal);
       return { pixel: pixel, dist: dist };
     }
@@ -58,7 +68,7 @@ class SceneObject {
   }
 
   // Calculate the pixel colour for the current pixel of the SceneObject that is being raytraced
-  calculateShading(scene, intersection, ray, normal) {
+  calculateShading(scene, intersection, ray, normal, recursionDepth = 0) {
 
     // If the object is a light we ignore
     if (this.type == LIGHT) return null;
@@ -70,6 +80,7 @@ class SceneObject {
     let result = vec3.create();
 
     // Iterate through each light in the scene and add the light contribution to the pixel
+    // At the moment, we are only considering 1 point light, however, we can implement light intensity to solve this issue in the future
     for (let i = 0; i < lights.length; i++) {
 
       let pixel = vec3.create();
@@ -84,33 +95,56 @@ class SceneObject {
       // Calculate the light direction
       let lightDir = vec3.normalize([], vec3.subtract([], lightPos, intersection));
 
+      // Calculate the dot product of the normal and light direction
+      let nDotL = vec3.dot(normal, lightDir);
+
+      // Calculate the reflection direction
+      let temp = 2.0 * nDotL;
+      let reflectDir = vec3.scale([], normal, temp);
+      // Here we are calculating the reflection direction from the light direction to determine specular highlights
+      vec3.subtract(reflectDir, reflectDir, lightDir);
+      vec3.normalize(reflectDir, reflectDir);
+
+      // Get the view direction to the intersection point
+      let viewDir = vec3.normalize([], vec3.subtract([], ray.origin, intersection));
+      let nDotV = vec3.dot(normal, viewDir);
+
       // Calculate ambient light
       ambientColor = vec3.multiply([], this.ambient, lightAmbient);
 
       // Check if the intersection point is in shadow
       if (this.isInShadow(scene, intersection, normal, lightPos)) {
         vec3.add(pixel, pixel, ambientColor);
+
+        // We calculate reflection if the surface has a shiny value that is not 0
+        if (this.shiny > 0.0 && recursionDepth < 1) {
+
+          // Recalculate the reflection direction using the view direction instead of the light direction
+          // because raytracing is a backwards process and we are calculating the reflection from the view direction
+          temp = 2.0 * nDotV;
+          reflectDir = vec3.scale([], normal, temp);
+          vec3.subtract(reflectDir, reflectDir, viewDir);
+          vec3.normalize(reflectDir, reflectDir);
+          // Get the reflection color if it exists
+          let col = this.calculateReflection(scene, intersection, normal, reflectDir, recursionDepth + 1);
+
+          // apply linear interpolation between the pixel and the reflection color based on the shiny value
+          if (col != null) {
+            vec3.lerp(pixel, pixel, col, this.shiny);
+          }
+        }
+        
+        // Add light contribution to the result
         vec3.add(result, result, pixel);
         continue;
       }
 
       // Calculate the diffuse component
-      let nDotL = vec3.dot(normal, lightDir);
       diffuseColor = vec3.multiply([], this.diffuse, lightColor);
       vec3.scale(diffuseColor, diffuseColor, nDotL);
 
-      // Calculate the reflection direction
-      let temp = 2.0 * nDotL;
-      let reflectDir = vec3.scale([], normal, temp);
-      // Consider using the viewing vector over the light direction for actual reflection calculations
-      vec3.subtract(reflectDir, reflectDir, lightDir);
-      vec3.normalize(reflectDir, reflectDir);
-
-      // Get the view direction to the intersection point
-      let view = vec3.normalize([], vec3.subtract([], ray.origin, intersection));
-
-      // Calculate the specular component
-      let spec = Math.pow(Math.max(vec3.dot(reflectDir, view), 0), 32.0);
+      // Calculate the specular component (use a specular exponent of 32.0)
+      let spec = Math.pow(Math.max(vec3.dot(reflectDir, viewDir), 0), 32.0);
       specularColor = vec3.multiply([], this.specular, lightColor);
       vec3.scale(specularColor, specularColor, spec);
 
@@ -118,16 +152,35 @@ class SceneObject {
       vec3.add(pixel, pixel, ambientColor);
       vec3.add(pixel, pixel, diffuseColor);
       vec3.add(pixel, pixel, specularColor);
+      vec3.clamp(pixel, 0.0, 1.0);
+
+      // We calculate reflection if the surface has a shiny value that is not 0
+      if (this.shiny > 0.0 && recursionDepth < 1) {
+
+        // Recalculate the reflection direction using the view direction instead of the light direction
+        // because raytracing is a backwards process and we are calculating the reflection from the view direction
+        temp = 2.0 * nDotV;
+        reflectDir = vec3.scale([], normal, temp);
+        vec3.subtract(reflectDir, reflectDir, viewDir);
+        vec3.normalize(reflectDir, reflectDir);
+
+        // Get the reflection color if it exists
+        let col = this.calculateReflection(scene, intersection, normal, reflectDir, recursionDepth);
+
+        // apply linear interpolation between the pixel and the reflection color based on the shiny value
+        if (col != null) {
+          vec3.lerp(pixel, pixel, col, this.shiny);
+        }
+      }
 
       // Add light contribution to the result
       vec3.add(result, result, pixel);
     }
 
-    // Multiply the pixel by 255 to get the final color for canvas
-    vec3.multiply(result, result, vec3.fromValues(255.0, 255.0, 255.0));
     return result;
   }
 
+  // Determine whether an intersection point is in a shadow
   isInShadow(scene, intersection, normal, lightPos) {
 
     // Get ray from intersection to light
@@ -138,14 +191,40 @@ class SceneObject {
 
     // I was getting some "shadow acne" and applying a small offset to the shadow ray origin fixed it
     shadowRay.origin = vec3.scaleAndAdd([], shadowRay.origin, normal, 0.0001);
-    
+
     // Check if the shadow ray intersects with an object in the BVH tree
-    if (scene.bvh.intersects(scene, shadowRay, true)) {
+    if (scene.bvh.intersects(scene, shadowRay, false)) {
       return true;
     }
-    
+
     // If no intersection, return false
     return false;
+  }
+
+  // Calculate the reflection color of a ray with the object
+  calculateReflection(scene, intersection, normal, reflectDir, recursionDepth) {
+
+    // Create a reflection ray using the intersection point and the reflection direction
+    let reflectRay = new Ray(intersection, reflectDir);
+
+    // I was getting some "acne" and applying a small offset to the shadow ray origin fixed it
+    reflectRay.origin = vec3.scaleAndAdd([], reflectRay.origin, normal, 0.0001);
+
+    // Check if the reflection ray intersects with an object in the BVH tree
+    let ref_intersection = scene.bvh.intersects(scene, reflectRay, false);
+
+    // If an intersection is found, calculate the shading for the reflection
+    if (ref_intersection != null) {
+      let hit_obj = ref_intersection.object;
+
+      // Calculate the shading for the reflection
+      let col = hit_obj.calculateShading(scene, ref_intersection.point, reflectRay, ref_intersection.normal, recursionDepth + 1);
+
+      return col;
+    }
+
+    // Otherwise, return null
+    return null;
   }
 }
 
@@ -186,7 +265,8 @@ class Sphere extends SceneObject {
       let intersection = intersectPoint(ray, a, b, discriminant);
       if (intersection == null) return null;
       let normal = vec3.normalize([], vec3.subtract([], intersection, this.position));
-      return { point: intersection, normal: normal };
+      let dist = vec3.distance(rayOrigin, intersection);
+      return { point: intersection, normal: normal, dist: dist, object: this };
       // Otherwise, return null
     } else {
       return null;
@@ -254,7 +334,7 @@ class Mesh extends SceneObject {
         vec3.normalize(normal, normal);
         if (dist < closestDist) {
           closestDist = dist;
-          closestIntersection = { point: intersection, normal: normal };
+          closestIntersection = { point: intersection, normal: normal, dist: dist, object: this };
         }
       }
     }
@@ -299,6 +379,9 @@ class Mesh extends SceneObject {
     }
 
     let t = f * vec3.dot(edge2, q);
+
+    // If t is negative, the intersection point is behind the ray origin
+    if (t < 0) return null;
 
     if (t > epsilon) {
       let intersectionPoint = vec3.scaleAndAdd([], rayOrigin, rayDirection, t);
@@ -354,7 +437,7 @@ function intersectPoint(ray, a, b, discriminant) {
     if (discriminant > 1) {
       // find root 2
       t1 = (-b + Math.sqrt(discriminant)) / (2.0 * a);
-      
+
       // We check if t0 and t1 are negative because negative values result in shadows that are not supposed to exist in the scene
       if (t0 < 0 && t1 < 0) return null;
 
@@ -373,7 +456,7 @@ function intersectPoint(ray, a, b, discriminant) {
       }
       else return ri1;
     }
-    
+
     // We check if t0 is negative because negative values result in shadows that are not supposed to exist in the scene
     if (t0 < 0) return null;
 

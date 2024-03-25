@@ -1,8 +1,19 @@
 // Author: Kyle Lukaszek
 // CIS*4800 W24 - Computer Graphics
-// Assignment 3
+// Assignment 4
 
 /* ---------------------- Scene -----------------------------*/
+
+// Default camera position for easy changes
+let camXYZ = vec3.fromValues(0, 0, 0);
+
+// Perspective camera flag
+// Enable this flag to use a perspective camera
+// By default, the camera views all NDC space
+let perspective = false;
+
+// Disabled by default, enable perspective camera to use
+let camFOV = 60.0
 
 class Scene {
   constructor() {
@@ -13,7 +24,7 @@ class Scene {
     this.objects = [];
     this.bvh = null;
     this.c = 0;
-    this.camera = new Camera(vec3.fromValues(0, 0, 0), vec3.fromValues(1, 1, 1), 60.0 * Math.PI / 180, null, 0.01, 100.0);
+    this.camera = new Camera(camXYZ, vec3.fromValues(1, 1, 1), camFOV * Math.PI / 180, null, 0.01, 100.0);
     this.camera.update();
     this._loadedObjs = [];
   }
@@ -199,8 +210,9 @@ class Scene {
 
       for (let x = 0; x < this.canvas.width; x++) {
 
-        // Calculate the ray direction for the current pixel
-        let rayDirection = this.camera.getRayDirection(x, y, this.width, this.height);
+        // Calculate the ray direction for the current pixel 
+        // The perspective flag is set to false by default, enable it at the top of the file if you want to use a perspective camera
+        let rayDirection = this.camera.getRayDirection(x, y, this.width, this.height, perspective);
 
         // Initialize a new ray with a current recursion depth of 0
         // The max recursion depth is set to 1 globally
@@ -217,6 +229,9 @@ class Scene {
 
           let pixel = intersection.pixel;
           let dist = intersection.dist;
+
+          // Multiply the pixel by 255 to get the final color for canvas
+          vec3.multiply(pixel, pixel, vec3.fromValues(255.0, 255.0, 255.0));
 
           // If the distance to the intersection point is less than the current depth, set the pixel
           if (dist < depth[index]) {
@@ -240,7 +255,7 @@ class Scene {
     this.objects = [];
     this.bvh = null;
     this.c = 0;
-    this.camera = new Camera(vec3.fromValues(0, 0, 0), vec3.fromValues(1, 1, 1), 60.0 * Math.PI / 180, null, 0.01, 100.0);
+    this.camera = new Camera(camXYZ, vec3.fromValues(1, 1, 1), camFOV * Math.PI / 180, null, 0.01, 100.0);
     this.camera.setAspect(this.canvas.width / this.canvas.height);
     this.camera.update();
     this._loadedObjs = [];
@@ -259,7 +274,7 @@ class Scene {
     // Append the loaded object to the list of loaded objects
     this._loadedObjs.push(obj);
 
-    if (this.objects.length > 0) {
+    if (this.objects.length >= 0) {
       this.assignAsMesh();
     }
   }

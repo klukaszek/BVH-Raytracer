@@ -24,6 +24,7 @@ class Camera {
   constructor(position, rotation, fov, aspect, near, far) {
     // Camera definition at the default camera location and orientation.
     this.eye = position;  // (x,y,z), origin
+    this.eye[2] = -this.eye[2];  // Flip the z-axis
     this.u = vec3.fromValues(rotation[0], 0, 0);  // <dx,dy,dz>, X axis
     this.v = vec3.fromValues(0, rotation[1], 0);  // <dx,dy,dz>, Y axis
     this.n = vec3.fromValues(0, 0, rotation[2]);  // <dx,dy,dz>, Z axis
@@ -55,21 +56,31 @@ class Camera {
     return mat4.perspective([], this.fov, this.aspect, this.near, this.far);
   }
 
-  getRayDirection(x, y, width, height) {
+  // Determine the ray direction for a given pixel in the image
+  // This function can be passed the perspective flag to apply FOV and aspect scaling
+  getRayDirection(x, y, width, height, perspective = false) {
 
     let ndcX = (2.0 * x / width) - 1.0;
     let ndcY = 1.0 - (2.0 * y / height);
 
-    let tanHalfFov = Math.tan(this.fov / 2.0);
-    let offsetX = tanHalfFov * this.aspect * ndcX;
-    let offsetY = tanHalfFov * ndcY;
+    if (perspective) {
+      
+      // Apply perspective scaling
+      let tanHalfFov = Math.tan(this.fov / 2.0);
+      let offsetX = tanHalfFov * this.aspect * ndcX;
+      let offsetY = tanHalfFov * ndcY;
+      let rayDirection = vec3.fromValues(offsetX, offsetY, -1.0);
+      vec3.normalize(rayDirection, rayDirection);
+      return rayDirection;
 
-    let rayDirection = vec3.fromValues(offsetX, offsetY, -1.0);
+    } else {
+      
+      // No perspective scaling
+      let rayDirection = vec3.fromValues(ndcX, ndcY, -1.0);
+      vec3.normalize(rayDirection, rayDirection);
+      return rayDirection;
 
-    vec3.normalize(rayDirection, rayDirection);
-
-    return rayDirection;
-
+    }
   }
 
   /**

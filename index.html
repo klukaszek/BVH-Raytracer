@@ -49,13 +49,17 @@
         let file = input.files[i];
         let reader = new FileReader();
         reader.readAsText(file);
-        reader.onload = function () {
+        reader.onload = async function () {
           if (file.name.includes(".txt")) {
             console.log("Loading Scene File...");
             scene.loadSceneInfo(reader.result);
           } else if (file.name.includes(".obj")) {
             console.log("Loading OBJ File...");
-            scene.loadObj(file.name, reader.result);
+
+            // If the file is an obj file, we make sure to load it after the scene file to avoid any issues
+            await setTimeout(() => {
+              scene.loadObj(file.name, reader.result);
+            }, 2000);
           } else {
             console.log("Invalid scene extension");
           }
@@ -68,7 +72,7 @@
       // Adding a delay allows js to load all files properly
       await setTimeout(() => {
         start();
-      }, 2000);
+      }, 4000);
     }
 
     function start() {
@@ -76,7 +80,7 @@
       // Assign the last loaded object as the mesh to be drawn
       // This is done to avoid javascript's asynchronous file loading
       scene.assignAsMesh();
-
+ 
       // This removes any meshes that may have been loaded that don't have any obj files assigned to them
       scene.removeHangingMeshes();
       

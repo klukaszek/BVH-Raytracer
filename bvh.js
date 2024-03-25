@@ -1,12 +1,9 @@
 // Author: Kyle Lukaszek
 // CIS*4800 W24 - Computer Graphics
-// Assignment 3
+// Assignment 4
 //
 // Description: This file contains the class for a BHV node 
 // and the functions to build the BVH tree using the objects in the scene
-
-const MAX_RECURSION_DEPTH = 1;
-
 class Ray {
   constructor(origin, direction, recursionDepth) {
     this.origin = origin;
@@ -25,28 +22,33 @@ class BVHNode {
   }
 
   // Check if a ray intersects the bounding box, and if it happens to be a leaf node we get the pixel colour and distance from the object
-  // If the test flag is set to true, we only check if the ray intersects an object and ignore the pixel colour
-  intersects(scene, ray, test = false) {
+  // Recursively check the children of the node for intersections with the ray
+  // The draw flag is set by default so that the BVH tree is used for returning the pixel colour and distance from the object
+  // If the draw flag is not set, the BVH tree is used for testing ray intersections with the objects
+  intersects(scene, ray, draw = true) {
 
     // If no intersection with the bounding box, return null
     if (!this.boundingBoxIntersect(ray)) {
       return null;
     }
 
-    // If the node is a leaf, check if the ray intersects the object and return the result (pixel colour and distance)
+    // If the node is a leaf, check if the ray intersects the object and return the result depending on the draw flag
     if (this.object) {
-      if (test) return this.object.intersects(ray);
-      return this.object.raytrace(scene, ray);
+      // If the draw flag is set, return the pixel colour and distance from the object
+      if (draw) return this.object.raytrace(scene, ray);
+
+      // Otherwise, only check for intersection with the object
+      return this.object.intersects(ray);
     }
 
     // Check both children for intersections with the ray
-    let leftLeaf = this.left.intersects(scene, ray, test);
+    let leftLeaf = this.left.intersects(scene, ray, draw);
 
-    // Otherwise, we return the right leaf
+    // If the left leaf is not null, check the right leaf for intersections
     if (leftLeaf != null) {
-      let rightLeaf = this.right.intersects(scene, ray, test);
+      let rightLeaf = this.right.intersects(scene, ray, draw);
 
-      // If the right leaf is closer, return it
+      // If the right leaf is closer, return it instead of the left leaf
       if (rightLeaf != null) {
         if (rightLeaf.dist < leftLeaf.dist) {
           return rightLeaf;
@@ -56,7 +58,8 @@ class BVHNode {
       return leftLeaf;
 
     } else {
-      return this.right.intersects(scene, ray, test);
+      // If the left leaf is null, return the right leaf
+      return this.right.intersects(scene, ray, draw);
     }
   }
 
