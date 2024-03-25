@@ -118,8 +118,6 @@ class Scene {
           // Set shininess value
           sphere.shiny = parseFloat(parts[13]);
 
-          console.log(sphere);
-
           i += 1;
         } catch (error) {
           failed = true;

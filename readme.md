@@ -37,3 +37,5 @@ To raytrace a scene, go to localhost:8000 in your browswer and load a scene file
 ### Sample Scenes:
 
 Check the testing files in testingFiles/
+
+Loading test2.txt with cube.obj should produce the multi-reflection example
