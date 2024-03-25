@@ -1,7 +1,7 @@
 # CIS 4800 Assignment 3/4 - Raytracer With Shadows and Reflections
 
 ## Author: Kyle Lukaszek
-
+### ID: 1113798
 ### Description:
 
 This JavaScript program takes a scene description file as an input and raytraces the scene to the 2D canvas. If a mesh is part of the scene description, it is important to load the .obj file along with the scene description so that the vertices are linked to the mesh object. If no obj is provided, the mesh is discarded from the list of scene objects and ignored.
